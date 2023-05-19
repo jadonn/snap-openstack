@@ -254,11 +254,12 @@ class SetHypervisorCharmConfigStep(BaseStep):
 class UserOpenRCStep(BaseStep):
     """Generate openrc for created cloud user."""
 
-    def __init__(self, auth_url: str, auth_version: str, openrc: str):
+    def __init__(self, auth_url: str, auth_version: str, openrc: str, clouds: str):
         super().__init__("Generate user openrc", "Generating openrc for cloud usage")
         self.auth_url = auth_url
         self.auth_version = auth_version
         self.openrc = openrc
+        self.clouds = clouds
         self.client = Client()
 
     def is_skip(self, status: Optional[Status] = None) -> Result:
@@ -293,6 +294,7 @@ class UserOpenRCStep(BaseStep):
             )
             tf_output = json.loads(process.stdout)
             self._print_openrc(tf_output)
+            self._print_clouds_yaml(tf_output)
             return Result(ResultType.COMPLETED)
         except subprocess.CalledProcessError as e:
             LOG.exception("Error initializing Terraform")
@@ -319,6 +321,27 @@ export OS_IDENTITY_API_VERSION={self.auth_version}"""
         else:
             console.print(_openrc)
 
+    def _print_clouds_yaml(self, tf_output: dict) -> None:
+        """Print a clouds.yaml file and save to disk using provided information"""
+        _cloudsyaml = f"""clouds:
+  sunbeam:
+    auth:
+      auth_url: {self.auth_url}
+      project_name: {tf_output["OS_PROJECT_NAME"]["value"]}
+      username: {tf_output["OS_USERNAME"]["value"]}
+      password: {tf_output["OS_PASSWORD"]["value"]}
+      user_domain_name: {tf_output["OS_USER_DOMAIN_NAME"]["value"]}
+      project_domain_name: {tf_output["OS_PROJECT_DOMAIN_NAME"]["value"]}
+    identity_api_version: {self.auth_version}
+"""
+        if self.clouds:
+            message = f"Writing clouds.yaml to {self.clouds} ... "
+            console.status(message)
+            with open(self.clouds, "w") as f_clouds:
+                os.fchmod(f_clouds.fileno(), mode=0o640)
+                f_clouds.write(_cloudsyaml)
+        else:
+            console.print(_cloudsyaml)
 
 class UserQuestions(BaseStep):
     """Ask user configuration questions."""
@@ -584,8 +607,9 @@ class SetLocalHypervisorOptions(BaseStep):
 @click.option("-a", "--accept-defaults", help="Accept all defaults.", is_flag=True)
 @click.option("-p", "--preseed", help="Preseed file.")
 @click.option("-o", "--openrc", help="Output file for cloud access details.")
+@click.option("-c", "--clouds", help="Output file for clouds.yaml cloud access details.")
 def configure(
-    openrc: str = None, preseed: str = None, accept_defaults: bool = False
+    openrc: str = None, preseed: str = None, accept_defaults: bool = False, clouds: str = None
 ) -> None:
     """Configure cloud with some sane defaults."""
     name = utils.get_fqdn()
@@ -634,6 +658,7 @@ def configure(
             auth_url=admin_credentials["OS_AUTH_URL"],
             auth_version=admin_credentials["OS_AUTH_VERSION"],
             openrc=openrc,
+            clouds=clouds,
         ),
         SetHypervisorCharmConfigStep(jhelper, ext_network=answer_file),
         SetLocalHypervisorOptions(name, jhelper),
