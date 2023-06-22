@@ -23,6 +23,7 @@ from sunbeam.commands import configure as configure_cmds
 from sunbeam.commands import dashboard_url as dasboard_url_cmds
 from sunbeam.commands import generate_cloud_config as generate_cloud_config_cmds
 from sunbeam.commands import generate_preseed as generate_preseed_cmds
+from sunbeam.commands import http_api as http_api_cmds
 from sunbeam.commands import inspect as inspect_cmds
 from sunbeam.commands import launch as launch_cmds
 from sunbeam.commands import node as node_cmds
@@ -76,6 +77,7 @@ def main():
     cli.add_command(configure_cmds.configure)
     cli.add_command(generate_cloud_config_cmds.cloud_config)
     cli.add_command(generate_preseed_cmds.generate_preseed)
+    cli.add_command(http_api_cmds.start_server)
     cli.add_command(inspect_cmds.inspect)
     cli.add_command(launch_cmds.launch)
     cli.add_command(openrc_cmds.openrc)
