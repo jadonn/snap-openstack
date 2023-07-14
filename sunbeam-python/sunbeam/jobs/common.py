@@ -16,6 +16,7 @@
 import enum
 import json
 import logging
+import os
 from typing import List, Optional, Type
 
 import click
@@ -26,6 +27,8 @@ from rich.status import Status
 from sunbeam.clusterd.client import Client
 
 LOG = logging.getLogger(__name__)
+RAM_16_GB_IN_KB = 16 * 1024 * 1024
+RAM_32_GB_IN_KB = 32 * 1024 * 1024
 
 
 class Role(enum.Enum):
@@ -185,6 +188,14 @@ class BaseStep:
         """
         pass
 
+    @property
+    def status(self):
+        """Returns the status to display.
+
+        :return: the status of the step
+        """
+        return self.description + " ... "
+
 
 def run_preflight_checks(checks: list, console: Console):
     """Run preflight checks sequentially.
@@ -202,7 +213,7 @@ def run_preflight_checks(checks: list, console: Console):
                 raise click.ClickException(check.message)
 
 
-def run_plan(plan: list, console: Console) -> dict:
+def run_plan(plan: List[BaseStep], console: Console) -> dict:
     """Run plans sequentially.
 
     Runs each step of the plan, logs each step of
@@ -214,25 +225,27 @@ def run_plan(plan: list, console: Console) -> dict:
     results = {}
 
     for step in plan:
-        LOG.debug(f"Starting step {step.name}")
-        message = f"{step.description} ... "
-        with console.status(message) as status:
+        LOG.debug(f"Starting step {step.name!r}")
+        with console.status(step.status) as status:
             if step.has_prompts():
                 status.stop()
                 step.prompt(console)
                 status.start()
 
-            skip_result = step.is_skip()
+            skip_result = step.is_skip(status)
             if skip_result.result_type == ResultType.SKIPPED:
                 results[step.__class__.__name__] = skip_result
                 LOG.debug(f"Skipping step {step.name}")
                 continue
 
+            if skip_result.result_type == ResultType.FAILED:
+                raise click.ClickException(skip_result.message)
+
             LOG.debug(f"Running step {step.name}")
-            result = step.run()
+            result = step.run(status)
             results[step.__class__.__name__] = result
             LOG.debug(
-                f"Finished running step {step.name}. " f"Result: {result.result_type}"
+                f"Finished running step {step.name!r}. Result: {result.result_type}"
             )
 
         if result.result_type == ResultType.FAILED:
@@ -267,6 +280,11 @@ def get_host_total_ram() -> int:
             if line.startswith("MemTotal"):
                 return int(line.split()[1])
     raise Exception("Could not determine total RAM")
+
+
+def get_host_total_cores() -> int:
+    """Return total cpu count."""
+    return os.cpu_count()
 
 
 def click_option_topology(func: decorators.FC) -> decorators.FC:

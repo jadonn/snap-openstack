@@ -175,9 +175,32 @@ class ExtendedAPIService(service.BaseService):
         nodes = self._get(f"/1.0/nodes?role={role}")
         return nodes.get("metadata")
 
+    def list_terraform_plans(self) -> List[str]:
+        """List all plans."""
+        plans = self._get("/1.0/terraformstate")
+        return plans.get("metadata")
+
+    def list_terraform_locks(self) -> List[str]:
+        """List all locks."""
+        locks = self._get("/1.0/terraformlock")
+        return locks.get("metadata")
+
+    def get_terraform_lock(self, plan: str) -> dict:
+        """Get lock information for plan."""
+        lock = self._get(f"/1.0/terraformlock/{plan}")
+        return json.loads(lock)
+
+    def unlock_terraform_plan(self, plan: str, lock: dict) -> None:
+        """Unlock plan."""
+        self._put(f"/1.0/terraformunlock/{plan}", data=json.dumps(lock))
+
 
 class ClusterService(MicroClusterService, ExtendedAPIService):
     """Lists and manages cluster."""
+
+    # SUNBEAM_BOOTSTRAP_KEY is used to track whether sunbeam bootstrap has
+    # sucessfully run. Note: this is distinct from microcluster bootstrap.
+    SUNBEAM_BOOTSTRAP_KEY = "sunbeam_bootstrapped"
 
     def bootstrap(self, name: str, address: str, role: List[str]) -> None:
         self.bootstrap_cluster(name, address)
@@ -202,3 +225,21 @@ class ClusterService(MicroClusterService, ExtendedAPIService):
         else:
             # Check if token exists in token list and remove
             self.delete_token(name)
+
+    def unset_sunbeam_bootstrapped(self) -> None:
+        """Remove sunbeam bootstrapped key."""
+        self.update_config(self.SUNBEAM_BOOTSTRAP_KEY, json.dumps("False"))
+
+    def set_sunbeam_bootstrapped(self) -> None:
+        """Mark sunbeam deployment as bootstrapped."""
+        self.update_config(self.SUNBEAM_BOOTSTRAP_KEY, json.dumps("True"))
+
+    def check_sunbeam_bootstrapped(self) -> bool:
+        """Check if the sunbeam deployment has been bootstrapped"""
+        try:
+            state = json.loads(self.get_config(self.SUNBEAM_BOOTSTRAP_KEY))
+        except service.ConfigItemNotFoundException:
+            state = False
+        except service.ClusterServiceUnavailableException:
+            state = False
+        return state

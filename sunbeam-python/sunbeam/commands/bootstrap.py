@@ -24,6 +24,7 @@ from rich.console import Console
 from snaphelpers import Snap
 
 from sunbeam import utils
+from sunbeam.commands.bootstrap_state import SetBootstrapped
 from sunbeam.commands.clusterd import (
     ClusterAddJujuUserStep,
     ClusterInitStep,
@@ -67,6 +68,8 @@ from sunbeam.jobs.checks import (
     JujuSnapCheck,
     LocalShareCheck,
     SshKeysConnectedCheck,
+    SystemRequirementsCheck,
+    VerifyHypervisorHostnameCheck,
 )
 from sunbeam.jobs.common import (
     Role,
@@ -175,17 +178,31 @@ def run_bootstrap(roles: List[Role],
         shutil.copytree(src, dst, dirs_exist_ok=True)
 
     preflight_checks = []
+    preflight_checks.append(SystemRequirementsCheck())
     preflight_checks.append(JujuSnapCheck())
     preflight_checks.append(SshKeysConnectedCheck())
     preflight_checks.append(DaemonGroupCheck())
     preflight_checks.append(LocalShareCheck())
+    if is_compute_node:
+        hypervisor_hostname = utils.get_hypervisor_hostname()
+        preflight_checks.append(
+            VerifyHypervisorHostnameCheck(fqdn, hypervisor_hostname)
+        )
 
     run_preflight_checks(preflight_checks, console)
 
     plan = []
     plan.append(JujuLoginStep(data_location))
     plan.append(ClusterInitStep(roles_to_str_list(roles)))
-    plan.append(BootstrapJujuStep(cloud_name, cloud_type, CONTROLLER))
+    plan.append(
+        BootstrapJujuStep(
+            cloud_name,
+            cloud_type,
+            CONTROLLER,
+            accept_defaults=accept_defaults,
+            preseed_file=preseed,
+        )
+    )
     run_plan(plan, console)
 
     plan2 = []
@@ -204,35 +221,30 @@ def run_bootstrap(roles: List[Role],
     tfhelper = TerraformHelper(
         path=snap.paths.user_common / "etc" / "deploy-microk8s",
         plan="microk8s-plan",
-        parallelism=1,
         backend="http",
         data_location=data_location,
     )
     tfhelper_openstack_deploy = TerraformHelper(
         path=snap.paths.user_common / "etc" / "deploy-openstack",
         plan="openstack-plan",
-        parallelism=1,
         backend="http",
         data_location=data_location,
     )
     tfhelper_hypervisor_deploy = TerraformHelper(
         path=snap.paths.user_common / "etc" / "deploy-openstack-hypervisor",
         plan="hypervisor-plan",
-        parallelism=1,
         backend="http",
         data_location=data_location,
     )
     tfhelper_microceph_deploy = TerraformHelper(
         path=snap.paths.user_common / "etc" / "deploy-microceph",
         plan="microceph-plan",
-        parallelism=1,
         backend="http",
         data_location=data_location,
     )
     tfhelper_sunbeam_machine = TerraformHelper(
         path=snap.paths.user_common / "etc" / "deploy-sunbeam-machine",
         plan="sunbeam-machine-plan",
-        parallelism=1,
         backend="http",
         data_location=data_location,
     )
@@ -291,6 +303,7 @@ def run_bootstrap(roles: List[Role],
         )
         plan5.append(AddHypervisorUnitStep(fqdn, jhelper))
 
+    plan5.append(SetBootstrapped())
     run_plan(plan5, console)
 
     click.echo(f"Node has been bootstrapped with roles: {pretty_roles}")

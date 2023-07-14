@@ -56,17 +56,13 @@ def mock_run_sync(mocker):
 class TestDeployControlPlaneStep(unittest.TestCase):
     def __init__(self, methodName: str = "runTest") -> None:
         super().__init__(methodName)
-        self.client = patch("sunbeam.commands.openstack.Client")
 
     def setUp(self):
-        self.client.start()
         self.jhelper = AsyncMock()
         self.tfhelper = Mock(path=Path())
 
-    def tearDown(self):
-        self.client.stop()
-
-    def test_run_pristine_installation(self):
+    @patch("sunbeam.commands.openstack.Client")
+    def test_run_pristine_installation(self, client):
         self.jhelper.get_application.side_effect = ApplicationNotFoundException(
             "not found"
         )
@@ -78,7 +74,8 @@ class TestDeployControlPlaneStep(unittest.TestCase):
         self.tfhelper.apply.assert_called_once()
         assert result.result_type == ResultType.COMPLETED
 
-    def test_run_tf_apply_failed(self):
+    @patch("sunbeam.commands.openstack.Client")
+    def test_run_tf_apply_failed(self, client):
         self.tfhelper.apply.side_effect = TerraformException("apply failed...")
 
         step = DeployControlPlaneStep(self.tfhelper, self.jhelper, TOPOLOGY, DATABASE)
@@ -88,7 +85,8 @@ class TestDeployControlPlaneStep(unittest.TestCase):
         assert result.result_type == ResultType.FAILED
         assert result.message == "apply failed..."
 
-    def test_run_waiting_timed_out(self):
+    @patch("sunbeam.commands.openstack.Client")
+    def test_run_waiting_timed_out(self, client):
         self.jhelper.wait_until_active.side_effect = TimeoutException("timed out")
 
         step = DeployControlPlaneStep(self.tfhelper, self.jhelper, TOPOLOGY, DATABASE)
@@ -98,7 +96,8 @@ class TestDeployControlPlaneStep(unittest.TestCase):
         assert result.result_type == ResultType.FAILED
         assert result.message == "timed out"
 
-    def test_run_unit_in_error_state(self):
+    @patch("sunbeam.commands.openstack.Client")
+    def test_run_unit_in_error_state(self, client):
         self.jhelper.wait_until_active.side_effect = JujuWaitException(
             "Unit in error: placement/0"
         )
@@ -109,6 +108,39 @@ class TestDeployControlPlaneStep(unittest.TestCase):
         self.jhelper.wait_until_active.assert_called_once()
         assert result.result_type == ResultType.FAILED
         assert result.message == "Unit in error: placement/0"
+
+    @patch("sunbeam.commands.openstack.Client")
+    def test_is_skip_pristine(self, client):
+        step = DeployControlPlaneStep(self.tfhelper, self.jhelper, TOPOLOGY, DATABASE)
+        with patch(
+            "sunbeam.commands.openstack.read_config",
+            Mock(side_effect=ConfigItemNotFoundException("not found")),
+        ):
+            result = step.is_skip()
+
+        assert result.result_type == ResultType.COMPLETED
+
+    @patch("sunbeam.commands.openstack.Client")
+    def test_is_skip_subsequent_run(self, client):
+        step = DeployControlPlaneStep(self.tfhelper, self.jhelper, TOPOLOGY, DATABASE)
+        with patch(
+            "sunbeam.commands.openstack.read_config",
+            Mock(return_value={"topology": "single", "database": "single"}),
+        ):
+            result = step.is_skip()
+
+        assert result.result_type == ResultType.COMPLETED
+
+    @patch("sunbeam.commands.openstack.Client")
+    def test_is_skip_database_changed(self, client):
+        step = DeployControlPlaneStep(self.tfhelper, self.jhelper, TOPOLOGY, DATABASE)
+        with patch(
+            "sunbeam.commands.openstack.read_config",
+            Mock(return_value={"topology": "single", "database": "multi"}),
+        ):
+            result = step.is_skip()
+
+        assert result.result_type == ResultType.FAILED
 
 
 class TestResizeControlPlaneStep(unittest.TestCase):

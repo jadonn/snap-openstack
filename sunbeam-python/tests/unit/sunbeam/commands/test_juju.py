@@ -139,7 +139,14 @@ class TestJujuLoginStep:
         with patch(
             "sunbeam.commands.juju.JujuAccount.load",
             Mock(return_value=Mock(user="test", password="test")),
-        ), patch("sunbeam.commands.juju.subprocess.run", Mock(return_code=1)):
+        ), patch(
+            "sunbeam.commands.juju.pexpect.spawn",
+            Mock(
+                return_value=Mock(
+                    __enter__=Mock(return_value=Mock(exitstatus=0)), __exit__=Mock()
+                )
+            ),
+        ):
             step = juju.JujuLoginStep(Mock())
             step._get_juju_binary = Mock(return_value="juju")
             assert step.is_skip().result_type == ResultType.COMPLETED
@@ -154,7 +161,14 @@ class TestJujuLoginStep:
         with patch(
             "sunbeam.commands.juju.JujuAccount.load",
             Mock(return_value=Mock(user="test", password="test")),
-        ), patch("sunbeam.commands.juju.subprocess.run", Mock(return_code=1)):
+        ), patch(
+            "sunbeam.commands.juju.pexpect.spawn",
+            Mock(
+                return_value=Mock(
+                    __enter__=Mock(return_value=Mock(exitstatus=0)), __exit__=Mock()
+                )
+            ),
+        ):
             step = juju.JujuLoginStep(Mock())
             step._get_juju_binary = Mock(return_value="juju")
             assert step.is_skip().result_type == ResultType.COMPLETED
@@ -174,7 +188,14 @@ class TestJujuLoginStep:
         with patch(
             "sunbeam.commands.juju.JujuAccount.load",
             Mock(return_value=Mock(user="test", password="test")),
-        ), patch("sunbeam.commands.juju.subprocess.run", Mock(return_code=1)):
+        ), patch(
+            "sunbeam.commands.juju.pexpect.spawn",
+            Mock(
+                return_value=Mock(
+                    __enter__=Mock(return_value=Mock(exitstatus=0)), __exit__=Mock()
+                )
+            ),
+        ):
             step = juju.JujuLoginStep(Mock())
             step._get_juju_binary = Mock(return_value="juju")
             assert step.is_skip().result_type == ResultType.COMPLETED
