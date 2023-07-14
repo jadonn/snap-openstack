@@ -129,6 +129,20 @@ def bootstrap(
     preseed: Optional[Path] = None,
     accept_defaults: bool = False,
 ) -> None:
+    run_bootstrap(
+        roles,
+        topology,
+        database,
+        preseed,
+        accept_defaults
+    )
+    
+def run_bootstrap(roles: List[Role],
+    topology: str,
+    database: str,
+    preseed: Optional[Path] = None,
+    accept_defaults: bool = False,
+) -> None:
     """Bootstrap the local node.
 
     Initialize the sunbeam cluster.
